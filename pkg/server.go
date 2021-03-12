@@ -54,6 +54,7 @@ func (*SocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		pingTicker:  nil,
 		statsTicker: nil,
 		mutex:       &sync.Mutex{},
+		evalChan:    make(chan *EvalRes),
 	}
 	Server.Clients = append(Server.Clients, cluster)
 	cluster.index = len(Server.Clients) - 1

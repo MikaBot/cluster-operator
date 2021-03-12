@@ -29,6 +29,7 @@ type Cluster struct {
 	pingTicker  *time.Ticker
 	statsTicker *time.Ticker
 	mutex       *sync.Mutex
+	evalChan    chan *EvalRes
 }
 
 type ClusterStats struct {
@@ -40,6 +41,21 @@ type ClusterStats struct {
 	MessagesSeen  int            `json:"messagesSeen"`
 	CommandErrors map[string]int `json:"commandErrors"`
 	CommandUsage  map[string]int `json:"commandUsage"`
+}
+
+type BroadcastEvalRequest struct {
+	ID   string `json:"id"`
+	Code string `json:"code"`
+}
+
+type BroadcastEvalResponse struct {
+	ID      string     `json:"id"`
+	Results []*EvalRes `json:"results"`
+}
+
+type EvalRes struct {
+	Res   string `json:"res,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 func (c *Cluster) Terminate() {
@@ -99,13 +115,11 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 	case StatsAck:
 		bytes, err := json.Marshal(msg.Body)
 		if err != nil {
-			logrus.Warnf("Stats collection error (occurred in Marshaling): %s", err.Error())
 			break
 		}
 		stats := &ClusterStats{}
 		err = json.Unmarshal(bytes, &stats)
 		if err != nil {
-			logrus.Warnf("Stats collection error (occurred in Unmarshalling): %s", err.Error())
 			break
 		}
 		clusterMetrics = append(clusterMetrics, stats)
@@ -113,6 +127,39 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 	case PingAck:
 		c.pingRecv = true
 		break
+	case BroadcastEval:
+		{
+			bytes, err := json.Marshal(msg.Body)
+			if err != nil {
+				break
+			}
+			req := &BroadcastEvalRequest{}
+			err = json.Unmarshal(bytes, &req)
+			if err != nil {
+				break
+			}
+			results := make([]*EvalRes, 0, len(Server.Clients))
+			for _, cluster := range Server.Clients {
+				cluster.Write(Eval, req.Code)
+				resp := <-cluster.evalChan
+				results = append(results, resp)
+			}
+			c.Write(BroadcastEvalAck, BroadcastEvalResponse{
+				ID:      req.ID,
+				Results: results,
+			})
+		}
+	case Eval:
+		bytes, err := json.Marshal(msg.Body)
+		if err != nil {
+			break
+		}
+		res := &EvalRes{}
+		err = json.Unmarshal(bytes, &res)
+		if err != nil {
+			break
+		}
+		c.evalChan <- res
 	}
 }
 
@@ -127,14 +174,13 @@ func (c *Cluster) Write(t int, data interface{}) {
 }
 
 func (c *Cluster) StartStatsCollector() {
-	c.statsTicker = time.NewTicker(1 * time.Second)
+	c.statsTicker = time.NewTicker(15 * time.Second)
 	go func() {
 		for {
 			select {
 			case <-c.statsTicker.C:
 				{
 					c.Write(Stats, nil)
-					logrus.Infof("Requesting statistics from cluster %d", c.ID)
 				}
 			}
 		}
