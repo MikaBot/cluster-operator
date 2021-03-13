@@ -33,6 +33,7 @@ type Cluster struct {
 }
 
 type ClusterStats struct {
+	Uptime        int            `json:"uptime"`
 	Servers       int            `json:"servers"`
 	Users         int            `json:"users"`
 	Shards        int            `json:"shards"`
