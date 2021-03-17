@@ -31,6 +31,7 @@ type Cluster struct {
 	mutex       *sync.Mutex
 	evalChan    chan *EvalRes
 	statsChan   chan *ClusterStats
+	Block       ClusterBlock
 }
 
 type ClusterStats struct {
@@ -61,10 +62,10 @@ type EvalRes struct {
 }
 
 func (c *Cluster) Terminate() {
-	c.TerminateWithReason(0, "")
+	c.TerminateWithReason(0, "", "disconnected")
 }
 
-func (c *Cluster) TerminateWithReason(code int, reason string) {
+func (c *Cluster) TerminateWithReason(code int, reason, logReason string) {
 	if c.Terminated {
 		return
 	}
@@ -80,7 +81,20 @@ func (c *Cluster) TerminateWithReason(code int, reason string) {
 		_ = c.Client.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason))
 	}
 	_ = c.Client.Close()
+	Log.PostLog(c, ColorDisconnecting, logReason)
 	Server.Clients = append(Server.Clients[:c.index], Server.Clients[c.index+1:]...)
+}
+
+func (c *Cluster) FirstShardID() int {
+	return c.Block.Shards[0]
+}
+
+func (c *Cluster) LastShardID() int {
+	if len(c.Block.Shards) < 2 {
+		return 1
+	} else {
+		return c.Block.Shards[len(c.Block.Shards)-1]
+	}
 }
 
 func (c *Cluster) HandleMessage(msg *Packet) {
@@ -94,20 +108,15 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 				lock.Unlock()
 				break
 			}
-			block := getClusterBlock(int(num))
-			last := 0
-			if len(block.Shards) < 2 {
-				last = 1
-			} else {
-				last = block.Shards[len(block.Shards)-1]
-			}
-			if len(block.Shards) > ShardThresh {
+			c.Block = getClusterBlock(int(num))
+			if len(c.Block.Shards) > ShardThresh {
 				logrus.Warnf("Cluster %d will be handling more than %d shards, consider increasing cluster count!", int(num), ShardThresh)
 			}
 			c.ID = int(num)
 			c.StartHealthCheck()
-			logrus.Infof("Giving cluster %d shards %d to %d", int(num), block.Shards[0], last)
-			c.Write(ShardData, block)
+			logrus.Infof("Giving cluster %d shards %d to %d", int(num), c.FirstShardID(), c.LastShardID())
+			Log.PostLog(c, ColorConnecting, "connecting")
+			c.Write(ShardData, c.Block)
 			lock.Unlock()
 			break
 		}
@@ -127,6 +136,9 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 		break
 	case PingAck:
 		c.pingRecv = true
+		break
+	case Ready:
+		Log.PostLog(c, ColorReady, "ready")
 		break
 	case BroadcastEval:
 		{
@@ -193,7 +205,7 @@ func (c *Cluster) StartHealthCheck() {
 				{
 					if !c.pingRecv {
 						logrus.Warnf("Cluster %d has not responded to the last ping, terminating connection...", c.ID)
-						c.TerminateWithReason(4001, "No ping received")
+						c.TerminateWithReason(4001, "No ping received", "unhealthy")
 					}
 					c.pingRecv = false
 					c.Write(Ping, nil)

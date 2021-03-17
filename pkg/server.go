@@ -22,6 +22,8 @@ const (
 	BroadcastEvalAck        // server -> client
 	Stats                   // server -> client
 	StatsAck                // client -> server
+	// Misc events
+	Ready // client -> server
 )
 
 type WSServer struct {
