@@ -27,3 +27,12 @@ func GetShardCount() int {
 	n, _ := strconv.Atoi(os.Getenv("SHARDS"))
 	return n
 }
+
+func LogsEnabled() bool {
+	k := os.Getenv("LOG")
+	if k != "" {
+		b, _ := strconv.ParseBool(k)
+		return b
+	}
+	return false
+}

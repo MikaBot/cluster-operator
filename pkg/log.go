@@ -106,6 +106,9 @@ func (log *Logger) operator(event string) string {
 }
 
 func (log *Logger) PostLog(c *Cluster, color int, event string) {
+	if !LogsEnabled() {
+		return
+	}
 	s := time.Now()
 	req, err := log.makeRequest(Embed{
 		Color:       color,
@@ -124,6 +127,9 @@ func (log *Logger) PostLog(c *Cluster, color int, event string) {
 }
 
 func (log *Logger) PostOperatorLog(color int, event string) {
+	if !LogsEnabled() {
+		return
+	}
 	s := time.Now()
 	req, err := log.makeRequest(Embed{
 		Color:       color,
