@@ -55,6 +55,7 @@ func (*SocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		statsTicker: nil,
 		mutex:       &sync.Mutex{},
 		evalChan:    make(chan *EvalRes),
+		statsChan:   make(chan *ClusterStats),
 	}
 	Server.Clients = append(Server.Clients, cluster)
 	cluster.index = len(Server.Clients) - 1
@@ -75,7 +76,7 @@ func (server *WSServer) Listen() {
 	http.Handle("/", &SocketHandler{})
 	http.Handle("/metrics", &MetricsHandler{})
 	logrus.Infof("Starting to listen on localhost:3010")
-	if err := http.ListenAndServe(":3010", nil); err != nil {
+	if err := http.ListenAndServe("0.0.0.0:3010", nil); err != nil {
 		logrus.Fatalf("HTTP Listen error: %v", err)
 	}
 }

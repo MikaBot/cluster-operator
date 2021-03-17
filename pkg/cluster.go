@@ -30,18 +30,19 @@ type Cluster struct {
 	statsTicker *time.Ticker
 	mutex       *sync.Mutex
 	evalChan    chan *EvalRes
+	statsChan   chan *ClusterStats
 }
 
 type ClusterStats struct {
-	Uptime        int            `json:"uptime"`
-	Servers       int            `json:"servers"`
-	Users         int            `json:"users"`
-	Shards        int            `json:"shards"`
-	ReadyShards   int            `json:"readyShards"`
-	MemoryUsage   float64        `json:"memoryUsage"`
-	MessagesSeen  int            `json:"messagesSeen"`
-	CommandErrors map[string]int `json:"commandErrors"`
-	CommandUsage  map[string]int `json:"commandUsage"`
+	Uptime        float64            `json:"uptime"`
+	Servers       float64            `json:"servers"`
+	Users         float64            `json:"users"`
+	Shards        float64            `json:"shards"`
+	ReadyShards   float64            `json:"readyShards"`
+	MemoryUsage   float64            `json:"memoryUsage"`
+	MessagesSeen  float64            `json:"messagesSeen"`
+	CommandErrors map[string]float64 `json:"commandErrors"`
+	CommandUsage  map[string]float64 `json:"commandUsage"`
 }
 
 type BroadcastEvalRequest struct {
@@ -104,7 +105,6 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 				logrus.Warnf("Cluster %d will be handling more than %d shards, consider increasing cluster count!", int(num), ShardThresh)
 			}
 			c.ID = int(num)
-			c.StartStatsCollector()
 			c.StartHealthCheck()
 			logrus.Infof("Giving cluster %d shards %d to %d", int(num), block.Shards[0], last)
 			c.Write(ShardData, block)
@@ -123,7 +123,7 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 		if err != nil {
 			break
 		}
-		clusterMetrics = append(clusterMetrics, stats)
+		c.statsChan <- stats
 		break
 	case PingAck:
 		c.pingRecv = true
@@ -174,18 +174,14 @@ func (c *Cluster) Write(t int, data interface{}) {
 	c.mutex.Unlock()
 }
 
-func (c *Cluster) StartStatsCollector() {
-	c.statsTicker = time.NewTicker(15 * time.Second)
-	go func() {
-		for {
-			select {
-			case <-c.statsTicker.C:
-				{
-					c.Write(Stats, nil)
-				}
-			}
-		}
-	}()
+func (c *Cluster) RequestStats() *ClusterStats {
+	c.Write(Stats, nil)
+	select {
+	case stats := <-c.statsChan:
+		return stats
+	case <-time.After(5 * time.Second):
+		return nil
+	}
 }
 
 func (c *Cluster) StartHealthCheck() {

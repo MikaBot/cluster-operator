@@ -3,8 +3,8 @@ package pkg
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sirupsen/logrus"
 	"net/http"
+	"strconv"
 )
 
 var (
@@ -12,7 +12,7 @@ var (
 		Name: namedPrefix("command_errors"),
 		Help: "Unexpected command errors",
 	}, []string{"name"})
-	commandUsage = prometheus.NewCounterVec(prometheus.CounterOpts{
+	commandUsage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: namedPrefix("command_usage"),
 		Help: "Command usage",
 	}, []string{"name"})
@@ -32,7 +32,7 @@ var (
 		Name: namedPrefix("shard_count"),
 		Help: "Shard count",
 	})
-	messagesSeen = prometheus.NewCounter(prometheus.CounterOpts{
+	messagesSeen = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: namedPrefix("messages"),
 		Help: "Messages seen",
 	})
@@ -42,7 +42,6 @@ var (
 	}, []string{"cluster"})
 	registry          = prometheus.NewRegistry()
 	prometheusHandler = promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
-	clusterMetrics    []*ClusterStats
 )
 
 func RegisterMetrics() {
@@ -58,12 +57,66 @@ func RegisterMetrics() {
 	)
 }
 
+func mergeClusterMetrics(clusterMetrics []*ClusterStats) *ClusterStats {
+	mergedMetrics := &ClusterStats{
+		CommandErrors: make(map[string]float64),
+		CommandUsage:  make(map[string]float64),
+	}
+	for _, metrics := range clusterMetrics {
+		mergedMetrics.Uptime += metrics.Uptime
+		mergedMetrics.Servers += metrics.Servers
+		mergedMetrics.Users += metrics.Users
+		mergedMetrics.Shards += metrics.Shards
+		mergedMetrics.ReadyShards += metrics.ReadyShards
+		mergedMetrics.MessagesSeen += metrics.MessagesSeen
+		for err, count := range metrics.CommandErrors {
+			entry, ok := metrics.CommandErrors[err]
+			if ok {
+				entry += count
+			} else {
+				entry = count
+			}
+			mergedMetrics.CommandErrors[err] = count
+		}
+		for err, count := range metrics.CommandUsage {
+			entry, ok := metrics.CommandUsage[err]
+			if ok {
+				entry += count
+			} else {
+				entry = count
+			}
+			mergedMetrics.CommandUsage[err] = count
+		}
+	}
+	return mergedMetrics
+}
+
 type MetricsHandler struct{}
 
 func (h *MetricsHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	for _, metric := range clusterMetrics {
-		logrus.Info(metric)
+	clusterMetrics := make([]*ClusterStats, 0, len(Server.Clients))
+	for _, cluster := range Server.Clients {
+		stats := cluster.RequestStats()
+		if stats == nil {
+			continue
+		}
+		clusterMetrics = append(clusterMetrics, stats)
+		g := memoryUsage.With(prometheus.Labels{"cluster": strconv.Itoa(cluster.ID)})
+		g.Set(stats.MemoryUsage)
 	}
-	//clusterMetrics = []*ClusterStats{}
+	metrics := mergeClusterMetrics(clusterMetrics)
+	for name, count := range metrics.CommandErrors {
+		g := commandErrors.With(prometheus.Labels{"name": name})
+		g.Set(count)
+	}
+	for name, count := range metrics.CommandUsage {
+		g := commandUsage.With(prometheus.Labels{"name": name})
+		g.Set(count)
+	}
+	servers.Set(metrics.Servers)
+	users.Set(metrics.Users)
+	clusterCount.Set(float64(GetClusterCount()))
+	shardCount.Set(metrics.ReadyShards)
+	messagesSeen.Set(metrics.MessagesSeen)
 	prometheusHandler.ServeHTTP(w, req)
 }
