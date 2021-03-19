@@ -81,7 +81,7 @@ func (c *Cluster) TerminateWithReason(code int, reason, logReason string) {
 		_ = c.Client.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason))
 	}
 	_ = c.Client.Close()
-	if c.ID > 0 && c.ID < len(Server.Clusters) {
+	if c.ID >= 0 && c.ID < len(Server.Clusters) {
 		Log.PostLog(c, ColorDisconnecting, logReason)
 	} else {
 		Log.PostOperatorLog(ColorDisconnecting, "Disconnected bad cluster")
