@@ -101,17 +101,14 @@ func (h *MetricsHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			continue
 		}
 		clusterMetrics = append(clusterMetrics, stats)
-		g := memoryUsage.With(prometheus.Labels{"cluster": strconv.Itoa(cluster.ID)})
-		g.Set(stats.MemoryUsage)
+		memoryUsage.With(prometheus.Labels{"cluster": strconv.Itoa(cluster.ID)}).Set(stats.MemoryUsage)
 	}
 	metrics := mergeClusterMetrics(clusterMetrics)
 	for name, count := range metrics.CommandErrors {
-		g := commandErrors.With(prometheus.Labels{"name": name})
-		g.Set(count)
+		commandErrors.With(prometheus.Labels{"name": name}).Set(count)
 	}
 	for name, count := range metrics.CommandUsage {
-		g := commandUsage.With(prometheus.Labels{"name": name})
-		g.Set(count)
+		commandUsage.With(prometheus.Labels{"name": name}).Set(count)
 	}
 	servers.Set(metrics.Servers)
 	users.Set(metrics.Users)
