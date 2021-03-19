@@ -40,12 +40,13 @@ type Packet struct {
 }
 
 func (*SocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("authorization") == "" || r.Header.Get("authorization") != GetAuth() {
-		return
-	}
 	client, err := Server.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		logrus.Warnf("Failed to upgrade a cluster client: %v", err)
+		return
+	}
+	if r.Header.Get("authorization") == "" || r.Header.Get("authorization") != GetAuth() {
+		_ = client.Close()
+		return
 	}
 	cluster := &Cluster{
 		ID:          -1,
@@ -75,7 +76,7 @@ func (*SocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (server *WSServer) Listen() {
-	http.Handle("/", &SocketHandler{})
+	http.Handle("/ws", &SocketHandler{})
 	http.Handle("/metrics", &MetricsHandler{})
 	logrus.Infof("Starting to listen on localhost:3010")
 	if err := http.ListenAndServe("0.0.0.0:3010", nil); err != nil {
