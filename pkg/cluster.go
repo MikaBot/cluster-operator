@@ -2,9 +2,9 @@ package pkg
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/tools/go/ssa/interp/testdata/src/fmt"
 	"sync"
 	"time"
 )
