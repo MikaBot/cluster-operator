@@ -86,7 +86,9 @@ func (c *Cluster) TerminateWithReason(code int, reason, logReason string) {
 	} else {
 		Log.PostOperatorLog(ColorDisconnecting, "Disconnected bad cluster")
 	}
-	Server.Clients = append(Server.Clients[:c.index], Server.Clients[c.index+1:]...)
+	if c.index >= 0 && c.index < len(Server.Clients) {
+		Server.Clients = append(Server.Clients[:c.index], Server.Clients[c.index+1:]...)
+	}
 }
 
 func (c *Cluster) FirstShardID() int {
