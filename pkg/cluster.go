@@ -103,7 +103,7 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 		lock.Lock()
 		if num, ok := msg.Body.(float64); ok {
 			logrus.Info(int(num), len(Server.Clusters))
-			if int(num) > len(Server.Clusters) {
+			if int(num) >= len(Server.Clusters) {
 				_ = c.Client.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "Cluster ID out of range"))
 				_ = c.Client.Close()
 				lock.Unlock()
