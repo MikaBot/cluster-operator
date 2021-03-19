@@ -102,7 +102,8 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 	case Handshaking:
 		lock.Lock()
 		if num, ok := msg.Body.(float64); ok {
-			if num < 0 || int(num) > len(Server.Clusters) {
+			logrus.Info(int(num), len(Server.Clusters))
+			if int(num) > len(Server.Clusters) {
 				_ = c.Client.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "Cluster ID out of range"))
 				_ = c.Client.Close()
 				lock.Unlock()
