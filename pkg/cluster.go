@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/tools/go/ssa/interp/testdata/src/fmt"
 	"sync"
 	"time"
 )
@@ -83,8 +84,6 @@ func (c *Cluster) TerminateWithReason(code int, reason, logReason string) {
 	_ = c.Client.Close()
 	if c.ID >= 0 && c.ID < len(Server.Clusters) {
 		Log.PostLog(c, ColorDisconnecting, logReason)
-	} else {
-		Log.PostOperatorLog(ColorDisconnecting, "Disconnected bad cluster")
 	}
 	if c.index >= 0 && c.index < len(Server.Clients) {
 		Server.Clients = append(Server.Clients[:c.index], Server.Clients[c.index+1:]...)
@@ -108,7 +107,6 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 	case Handshaking:
 		lock.Lock()
 		if num, ok := msg.Body.(float64); ok {
-			logrus.Info(int(num), len(Server.Clusters))
 			if int(num) >= len(Server.Clusters) {
 				_ = c.Client.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "Cluster ID out of range"))
 				_ = c.Client.Close()
@@ -117,7 +115,10 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 			}
 			c.Block = getClusterBlock(int(num))
 			if len(c.Block.Shards) > ShardThresh {
-				logrus.Warnf("Cluster %d will be handling more than %d shards, consider increasing cluster count!", int(num), ShardThresh)
+				Log.PostOperatorLog(
+					ColorWarning,
+					fmt.Sprintf("Cluster `%d` will be handling more than `%d` shards, consider increasing cluster count!", int(num), ShardThresh),
+				)
 			}
 			c.ID = int(num)
 			c.StartHealthCheck()

@@ -14,6 +14,7 @@ import (
 const (
 	ColorConnecting    = 0x0E6CF7
 	ColorReady         = 0x00DB62
+	ColorWarning       = 0xFFFF66
 	ColorDisconnecting = 0xFF4444
 )
 
