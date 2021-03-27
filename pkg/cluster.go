@@ -48,8 +48,9 @@ type ClusterStats struct {
 }
 
 type BroadcastEvalRequest struct {
-	ID   string `json:"id"`
-	Code string `json:"code"`
+	ID      string `json:"id"`
+	Code    string `json:"code"`
+	Timeout int    `json:"timeout"`
 }
 
 type BroadcastEvalResponse struct {
@@ -162,8 +163,20 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 			results := make([]*EvalRes, 0, len(Server.Clients))
 			for _, cluster := range Server.Clients {
 				cluster.Write(Eval, req.Code)
-				resp := <-cluster.evalChan
-				results = append(results, resp)
+				select {
+				case resp := <-cluster.evalChan:
+					{
+						results = append(results, resp)
+						break
+					}
+				case <-time.After(time.Duration(req.Timeout) * time.Millisecond):
+					{
+						results = append(results, &EvalRes{
+							Error: "Response timed out",
+						})
+						break
+					}
+				}
 			}
 			c.Write(BroadcastEvalAck, BroadcastEvalResponse{
 				ID:      req.ID,
