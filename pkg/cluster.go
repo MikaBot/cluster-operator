@@ -9,21 +9,25 @@ import (
 	"time"
 )
 
+type ClusterShardData struct {
+	ID    int          `json:"id"`
+	Block ClusterBlock `json:"block"`
+}
+
 type ClusterBlock struct {
 	Shards []int `json:"shards"`
 	Total  int   `json:"total"`
 }
 
-func getClusterBlock(id int) ClusterBlock {
-	return ClusterBlock{
-		Shards: Server.Clusters[id],
-		Total:  GetShardCount(),
-	}
-}
+type ClusterState int
+
+const (
+	ClusterWaiting ClusterState = iota
+	ClusterConnecting
+	ClusterReady
+)
 
 type Cluster struct {
-	index       int
-	Terminated  bool
 	ID          int
 	Client      *websocket.Conn
 	pingRecv    bool
@@ -33,6 +37,7 @@ type Cluster struct {
 	evalChan    chan *EvalRes
 	statsChan   chan *ClusterStats
 	Block       ClusterBlock
+	State       ClusterState
 }
 
 type ClusterStats struct {
@@ -68,11 +73,10 @@ func (c *Cluster) Terminate() {
 }
 
 func (c *Cluster) TerminateWithReason(code int, reason, logReason string) {
-	if c.Terminated {
+	if c.State == ClusterWaiting || c.State == ClusterConnecting {
 		return
 	}
 	logrus.Infof("Terminating cluster %d ", c.ID)
-	c.Terminated = true
 	if c.pingTicker != nil {
 		c.pingTicker.Stop()
 	}
@@ -86,9 +90,9 @@ func (c *Cluster) TerminateWithReason(code int, reason, logReason string) {
 	if c.ID >= 0 && c.ID < len(Server.Clusters) {
 		Log.PostLog(c, ColorDisconnecting, logReason)
 	}
-	if c.index >= 0 && c.index < len(Server.Clients) {
-		Server.Clients = append(Server.Clients[:c.index], Server.Clients[c.index+1:]...)
-	}
+	c.State = ClusterWaiting
+	c.statsTicker = nil
+	c.pingTicker = nil
 }
 
 func (c *Cluster) FirstShardID() int {
@@ -107,28 +111,16 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 	switch msg.Type {
 	case Handshaking:
 		lock.Lock()
-		if num, ok := msg.Body.(float64); ok {
-			if int(num) >= len(Server.Clusters) {
-				_ = c.Client.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "Cluster ID out of range"))
-				_ = c.Client.Close()
-				lock.Unlock()
-				break
-			}
-			c.Block = getClusterBlock(int(num))
-			if len(c.Block.Shards) > ShardThresh {
-				Log.PostOperatorLog(
-					ColorWarning,
-					fmt.Sprintf("Cluster `%d` will be handling more than `%d` shards, consider increasing cluster count!", int(num), ShardThresh),
-				)
-			}
-			c.ID = int(num)
-			c.StartHealthCheck()
-			logrus.Infof("Giving cluster %d shards %d to %d", int(num), c.FirstShardID(), c.LastShardID())
-			Log.PostLog(c, ColorConnecting, "connecting")
-			c.Write(ShardData, c.Block)
-			lock.Unlock()
-			break
+		if len(c.Block.Shards) > ShardThresh {
+			Log.PostOperatorLog(
+				ColorWarning,
+				fmt.Sprintf("Cluster `%d` will be handling more than `%d` shards, consider increasing cluster count!", c.ID, ShardThresh),
+			)
 		}
+		c.StartHealthCheck()
+		logrus.Infof("Giving cluster %d shards %d to %d", c.ID, c.FirstShardID(), c.LastShardID())
+		Log.PostLog(c, ColorConnecting, "connecting")
+		c.Write(ShardData, ClusterShardData{ID: c.ID, Block: c.Block})
 		lock.Unlock()
 		break
 	case StatsAck:
@@ -147,6 +139,7 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 		c.pingRecv = true
 		break
 	case Ready:
+		c.State = ClusterReady
 		Log.PostLog(c, ColorReady, "ready")
 		break
 	case BroadcastEval:
@@ -162,6 +155,12 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 			}
 			results := make([]*EvalRes, 0, len(Server.Clients))
 			for _, cluster := range Server.Clients {
+				if cluster.State == ClusterWaiting || cluster.State == ClusterConnecting {
+					results = append(results, &EvalRes{
+						Error: "Cluster is not ready!",
+					})
+					continue
+				}
 				cluster.Write(Eval, req.Code)
 				select {
 				case resp := <-cluster.evalChan:

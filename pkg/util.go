@@ -3,6 +3,7 @@ package pkg
 import (
 	"github.com/joho/godotenv"
 	"os"
+	"sync"
 )
 
 func namedPrefix(key string) string {
@@ -10,15 +11,32 @@ func namedPrefix(key string) string {
 	return "mika_" + os.Getenv("ENV") + "_" + key
 }
 
-func GetShardGroups(shards, clusters int) [][]int {
+func CreateClusters(shards, clusters int) {
 	shardIds := make([]int, 0, shards)
 	for i := 0; i < shards; i++ {
 		shardIds = append(shardIds, i)
 	}
-	chunks := make([][]int, 0, clusters)
 	avgShardsPerCluster := shards / clusters
 	for i := 0; i < len(shardIds); i += avgShardsPerCluster {
-		chunks = append(chunks, shardIds[i:i+avgShardsPerCluster])
+		Server.Clients = append(Server.Clients, &Cluster{
+			ID:          i,
+			Block:       ClusterBlock{Shards: shardIds[i : i+avgShardsPerCluster], Total: GetShardCount()},
+			Client:      nil,
+			pingRecv:    false,
+			pingTicker:  nil,
+			statsTicker: nil,
+			mutex:       &sync.Mutex{},
+			evalChan:    make(chan *EvalRes),
+			statsChan:   make(chan *ClusterStats),
+		})
 	}
-	return chunks
+}
+
+func NextClusterID() int {
+	for index, cluster := range Server.Clients {
+		if cluster.State == ClusterWaiting {
+			return index
+		}
+	}
+	return -1
 }

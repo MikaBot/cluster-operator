@@ -48,29 +48,23 @@ func (*SocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = client.Close()
 		return
 	}
-	cluster := &Cluster{
-		ID:          -1,
-		index:       -1,
-		Terminated:  false,
-		Client:      client,
-		pingRecv:    false,
-		pingTicker:  nil,
-		statsTicker: nil,
-		mutex:       &sync.Mutex{},
-		evalChan:    make(chan *EvalRes),
-		statsChan:   make(chan *ClusterStats),
+	id := NextClusterID()
+	if id == -1 {
+		_ = client.Close()
+		return
 	}
-	Server.Clients = append(Server.Clients, cluster)
-	cluster.index = len(Server.Clients) - 1
+	c := Server.Clients[id]
+	c.Client = client
+	c.State = ClusterConnecting
 	go func() {
 		for {
 			var packet *Packet
 			err := client.ReadJSON(&packet)
 			if err != nil {
-				cluster.Terminate()
+				c.Terminate()
 				break
 			}
-			go cluster.HandleMessage(packet)
+			go c.HandleMessage(packet)
 		}
 	}()
 }

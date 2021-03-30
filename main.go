@@ -23,12 +23,11 @@ func init() {
 func main() {
 	pkg.RegisterMetrics()
 	pkg.NewLogger()
-	groups := pkg.GetShardGroups(pkg.GetShardCount(), pkg.GetClusterCount())
 	pkg.Server = &pkg.WSServer{
 		Clients:  []*pkg.Cluster{},
 		Upgrader: websocket.Upgrader{},
-		Clusters: groups,
 	}
+	pkg.CreateClusters(pkg.GetShardCount(), pkg.GetClusterCount())
 	pkg.Log.PostOperatorLog(pkg.ColorReady, fmt.Sprintf(
 		"Operator is online and will be handling %d shards with %d clusters, that's about %d shard(s) per cluster!",
 		pkg.GetShardCount(),
