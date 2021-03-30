@@ -19,15 +19,14 @@ func CreateClusters(shards, clusters int) {
 	avgShardsPerCluster := shards / clusters
 	for i := 0; i < len(shardIds); i += avgShardsPerCluster {
 		Server.Clients = append(Server.Clients, &Cluster{
-			ID:          i,
-			Block:       ClusterBlock{Shards: shardIds[i : i+avgShardsPerCluster], Total: GetShardCount()},
-			Client:      nil,
-			pingRecv:    false,
-			pingTicker:  nil,
-			statsTicker: nil,
-			mutex:       &sync.Mutex{},
-			evalChan:    make(chan *EvalRes),
-			statsChan:   make(chan *ClusterStats),
+			ID:         i,
+			Block:      ClusterBlock{Shards: shardIds[i : i+avgShardsPerCluster], Total: GetShardCount()},
+			Client:     nil,
+			pingRecv:   false,
+			pingTicker: nil,
+			mutex:      &sync.Mutex{},
+			evalChan:   make(chan *EvalRes),
+			statsChan:  make(chan *ClusterStats),
 		})
 	}
 }
