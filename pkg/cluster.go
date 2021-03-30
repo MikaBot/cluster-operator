@@ -28,15 +28,15 @@ const (
 )
 
 type Cluster struct {
-	ID         int
-	Client     *websocket.Conn
-	pingRecv   bool
+	ID         int             `json:"id"`
+	Client     *websocket.Conn `json:"-"`
+	PingRecv   bool            `json:"ping_recv"`
+	Block      ClusterBlock    `json:"block"`
+	State      ClusterState    `json:"state"`
 	pingTicker *time.Ticker
 	mutex      *sync.Mutex
 	evalChan   chan *EvalRes
 	statsChan  chan *ClusterStats
-	Block      ClusterBlock
-	State      ClusterState
 }
 
 type ClusterStats struct {
@@ -72,9 +72,6 @@ func (c *Cluster) Terminate() {
 }
 
 func (c *Cluster) TerminateWithReason(code int, reason, logReason string) {
-	if c.State == ClusterWaiting || c.State == ClusterConnecting {
-		return
-	}
 	logrus.Infof("Terminating cluster %d ", c.ID)
 	if c.pingTicker != nil {
 		c.pingTicker.Stop()
@@ -95,11 +92,7 @@ func (c *Cluster) FirstShardID() int {
 }
 
 func (c *Cluster) LastShardID() int {
-	if len(c.Block.Shards) < 2 {
-		return 1
-	} else {
-		return c.Block.Shards[len(c.Block.Shards)-1]
-	}
+	return c.Block.Shards[len(c.Block.Shards)-1] + 1
 }
 
 func (c *Cluster) HandleMessage(msg *Packet) {
@@ -131,7 +124,7 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 		c.statsChan <- stats
 		break
 	case PingAck:
-		c.pingRecv = true
+		c.PingRecv = true
 		break
 	case Ready:
 		c.State = ClusterReady
@@ -222,11 +215,11 @@ func (c *Cluster) StartHealthCheck() {
 			case <-c.pingTicker.C:
 				{
 					if c.State == ClusterReady {
-						if !c.pingRecv {
+						if !c.PingRecv {
 							logrus.Warnf("Cluster %d has not responded to the last ping, terminating connection...", c.ID)
 							c.TerminateWithReason(4001, "No ping received", "unhealthy")
 						}
-						c.pingRecv = false
+						c.PingRecv = false
 						c.Write(Ping, nil)
 					}
 				}

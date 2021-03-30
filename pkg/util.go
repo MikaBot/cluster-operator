@@ -1,7 +1,9 @@
 package pkg
 
 import (
+	"encoding/json"
 	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
 	"os"
 	"sync"
 )
@@ -19,10 +21,11 @@ func CreateClusters(shards, clusters int) {
 	avgShardsPerCluster := shards / clusters
 	for i := 0; i < len(shardIds); i += avgShardsPerCluster {
 		Server.Clients = append(Server.Clients, &Cluster{
-			ID:         i,
-			Block:      ClusterBlock{Shards: shardIds[i : i+avgShardsPerCluster], Total: GetShardCount()},
+			ID:         len(Server.Clients),
 			Client:     nil,
-			pingRecv:   false,
+			PingRecv:   false,
+			Block:      ClusterBlock{Shards: shardIds[i : i+avgShardsPerCluster], Total: GetShardCount()},
+			State:      ClusterWaiting,
 			pingTicker: nil,
 			mutex:      &sync.Mutex{},
 			evalChan:   make(chan *EvalRes),
@@ -33,6 +36,8 @@ func CreateClusters(shards, clusters int) {
 
 func NextClusterID() int {
 	for index, cluster := range Server.Clients {
+		v, _ := json.Marshal(cluster)
+		logrus.Info(string(v))
 		if cluster.State == ClusterWaiting {
 			return index
 		}
