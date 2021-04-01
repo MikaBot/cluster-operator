@@ -80,7 +80,7 @@ func (c *Cluster) TerminateWithReason(code int, reason, logReason string) {
 		_ = c.Client.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason))
 	}
 	_ = c.Client.Close()
-	if c.ID >= 0 && c.ID < len(Server.Clusters) {
+	if c.ID >= 0 && c.ID < len(Server.Clients) {
 		Log.PostLog(c, ColorDisconnecting, logReason)
 	}
 	c.State = ClusterWaiting

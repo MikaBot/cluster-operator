@@ -1,9 +1,7 @@
 package pkg
 
 import (
-	"encoding/json"
 	"github.com/joho/godotenv"
-	"github.com/sirupsen/logrus"
 	"os"
 	"sync"
 )
@@ -36,8 +34,6 @@ func CreateClusters(shards, clusters int) {
 
 func NextClusterID() int {
 	for index, cluster := range Server.Clients {
-		v, _ := json.Marshal(cluster)
-		logrus.Info(string(v))
 		if cluster.State == ClusterWaiting {
 			return index
 		}
