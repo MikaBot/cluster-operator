@@ -49,6 +49,7 @@ type ClusterStats struct {
 	MessagesSeen  float64            `json:"messagesSeen"`
 	CommandErrors map[string]float64 `json:"commandErrors"`
 	CommandUsage  map[string]float64 `json:"commandUsage"`
+	BotEvents     map[string]float64 `json:"botEvents"`
 }
 
 type BroadcastEvalRequest struct {
@@ -195,13 +196,16 @@ func (c *Cluster) Write(t int, data interface{}) {
 }
 
 func (c *Cluster) RequestStats() *ClusterStats {
-	c.Write(Stats, nil)
-	select {
-	case stats := <-c.statsChan:
-		return stats
-	case <-time.After(5 * time.Second):
-		return nil
+	if c.Client != nil {
+		c.Write(Stats, nil)
+		select {
+		case stats := <-c.statsChan:
+			return stats
+		case <-time.After(5 * time.Second):
+			return nil
+		}
 	}
+	return nil
 }
 
 func (c *Cluster) StartHealthCheck() {

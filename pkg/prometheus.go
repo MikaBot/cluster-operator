@@ -40,6 +40,10 @@ var (
 		Name: namedPrefix("memory_usage"),
 		Help: "Memory usage per cluster",
 	}, []string{"cluster"})
+	discordEvents = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: namedPrefix("discord_events"),
+		Help: "Discord events per cluster",
+	}, []string{"name"})
 	registry          = prometheus.NewRegistry()
 	prometheusHandler = promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 )
@@ -54,6 +58,7 @@ func RegisterMetrics() {
 		shardCount,
 		messagesSeen,
 		memoryUsage,
+		discordEvents,
 	)
 }
 
@@ -61,6 +66,7 @@ func mergeClusterMetrics(clusterMetrics []*ClusterStats) *ClusterStats {
 	mergedMetrics := &ClusterStats{
 		CommandErrors: make(map[string]float64),
 		CommandUsage:  make(map[string]float64),
+		BotEvents:     make(map[string]float64),
 	}
 	for _, metrics := range clusterMetrics {
 		mergedMetrics.Uptime += metrics.Uptime
@@ -69,23 +75,32 @@ func mergeClusterMetrics(clusterMetrics []*ClusterStats) *ClusterStats {
 		mergedMetrics.Shards += metrics.Shards
 		mergedMetrics.ReadyShards += metrics.ReadyShards
 		mergedMetrics.MessagesSeen += metrics.MessagesSeen
-		for err, count := range metrics.CommandErrors {
-			entry, ok := metrics.CommandErrors[err]
+		for v, count := range metrics.CommandErrors {
+			entry, ok := metrics.CommandErrors[v]
 			if ok {
 				entry += count
 			} else {
 				entry = count
 			}
-			mergedMetrics.CommandErrors[err] = count
+			mergedMetrics.CommandErrors[v] = count
 		}
-		for err, count := range metrics.CommandUsage {
-			entry, ok := metrics.CommandUsage[err]
+		for v, count := range metrics.CommandUsage {
+			entry, ok := metrics.CommandUsage[v]
 			if ok {
 				entry += count
 			} else {
 				entry = count
 			}
-			mergedMetrics.CommandUsage[err] = count
+			mergedMetrics.CommandUsage[v] = count
+		}
+		for v, count := range metrics.BotEvents {
+			entry, ok := metrics.BotEvents[v]
+			if ok {
+				entry += count
+			} else {
+				entry = count
+			}
+			mergedMetrics.BotEvents[v] = count
 		}
 	}
 	return mergedMetrics
@@ -109,6 +124,9 @@ func (h *MetricsHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	for name, count := range metrics.CommandUsage {
 		commandUsage.With(prometheus.Labels{"name": name}).Set(count)
+	}
+	for name, count := range metrics.BotEvents {
+		discordEvents.With(prometheus.Labels{"name": name}).Set(count)
 	}
 	servers.Set(metrics.Servers)
 	users.Set(metrics.Users)
