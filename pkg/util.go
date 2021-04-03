@@ -40,3 +40,13 @@ func NextClusterID() int {
 	}
 	return -1
 }
+
+func GetHealthyClusters() int {
+	healthy := 0
+	for _, cluster := range Server.Clients {
+		if cluster.State == ClusterReady {
+			healthy++
+		}
+	}
+	return healthy
+}

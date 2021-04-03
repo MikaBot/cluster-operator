@@ -109,6 +109,21 @@ func mergeClusterMetrics(clusterMetrics []*ClusterStats) *ClusterStats {
 type MetricsHandler struct{}
 
 func (h *MetricsHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if GetHealthyClusters() < 1 {
+		// Reset metrics if no clusters are healthy rather than returning no data
+		memoryUsage.Reset()
+		commandErrors.Reset()
+		commandUsage.Reset()
+		servers.Set(0)
+		users.Set(0)
+		clusterCount.Set(0)
+		shardCount.Set(0)
+		messagesSeen.Set(0)
+		memoryUsage.Reset()
+		discordEvents.Reset()
+		prometheusHandler.ServeHTTP(w, req)
+		return
+	}
 	clusterMetrics := make([]*ClusterStats, 0, len(Server.Clients))
 	for _, cluster := range Server.Clients {
 		stats := cluster.RequestStats()
