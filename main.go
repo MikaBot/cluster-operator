@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 )
 
@@ -24,8 +25,10 @@ func main() {
 	pkg.RegisterMetrics()
 	pkg.NewLogger()
 	pkg.Server = &pkg.WSServer{
-		Clients:  []*pkg.Cluster{},
-		Upgrader: websocket.Upgrader{},
+		Clients:   []*pkg.Cluster{},
+		Upgrader:  websocket.Upgrader{},
+		ChanMutex: &sync.RWMutex{},
+		Channels:  make(map[string]chan pkg.EvalRes),
 	}
 	pkg.CreateClusters(pkg.GetShardCount(), pkg.GetClusterCount())
 	pkg.Log.PostOperatorLog(pkg.ColorReady, fmt.Sprintf(

@@ -26,7 +26,6 @@ func CreateClusters(shards, clusters int) {
 			State:      ClusterWaiting,
 			pingTicker: nil,
 			mutex:      &sync.Mutex{},
-			evalChan:   make(chan *EvalRes),
 			statsChan:  make(chan *ClusterStats),
 		})
 	}

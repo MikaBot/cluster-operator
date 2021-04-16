@@ -35,7 +35,6 @@ type Cluster struct {
 	State      ClusterState    `json:"state"`
 	pingTicker *time.Ticker
 	mutex      *sync.Mutex
-	evalChan   chan *EvalRes
 	statsChan  chan *ClusterStats
 }
 
@@ -59,11 +58,12 @@ type BroadcastEvalRequest struct {
 }
 
 type BroadcastEvalResponse struct {
-	ID      string     `json:"id"`
-	Results []*EvalRes `json:"results"`
+	ID      string    `json:"id"`
+	Results []EvalRes `json:"results"`
 }
 
 type EvalRes struct {
+	ID    string `json:"id,omitempty"`
 	Res   string `json:"res,omitempty"`
 	Error string `json:"error,omitempty"`
 }
@@ -142,30 +142,40 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 			if err != nil {
 				break
 			}
-			results := make([]*EvalRes, 0, len(Server.Clients))
+			Server.PutEvalChan(req.ID)
+			results := make([]EvalRes, 0, len(Server.Clients))
 			for _, cluster := range Server.Clients {
 				if cluster.State == ClusterWaiting || cluster.State == ClusterConnecting {
-					results = append(results, &EvalRes{
+					results = append(results, EvalRes{
 						Error: "Cluster is not ready!",
 					})
 					continue
 				}
-				cluster.Write(Eval, req.Code)
+				cluster.Write(Eval, BroadcastEvalRequest{
+					ID:      req.ID,
+					Code:    req.Code,
+					Timeout: -1,
+				})
 				select {
-				case resp := <-cluster.evalChan:
+				case resp := <-Server.GetEvalChan(req.ID):
 					{
-						results = append(results, resp)
+						results = append(results, EvalRes{
+							ID:    "",
+							Res:   resp.Res,
+							Error: resp.Error,
+						})
 						break
 					}
 				case <-time.After(time.Duration(req.Timeout) * time.Millisecond):
 					{
-						results = append(results, &EvalRes{
+						results = append(results, EvalRes{
 							Error: "Response timed out",
 						})
 						break
 					}
 				}
 			}
+			Server.DeleteEvalChan(req.ID)
 			c.Write(BroadcastEvalAck, BroadcastEvalResponse{
 				ID:      req.ID,
 				Results: results,
@@ -176,12 +186,14 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 		if err != nil {
 			break
 		}
-		res := &EvalRes{}
+		res := EvalRes{}
 		err = json.Unmarshal(bytes, &res)
 		if err != nil {
 			break
 		}
-		c.evalChan <- res
+		if c := Server.GetEvalChan(res.ID); c != nil {
+			c <- res
+		}
 	}
 }
 

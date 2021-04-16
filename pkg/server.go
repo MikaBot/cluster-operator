@@ -27,9 +27,10 @@ const (
 )
 
 type WSServer struct {
-	Clients  []*Cluster
-	Upgrader websocket.Upgrader
-	Clusters [][]int
+	Clients   []*Cluster
+	Upgrader  websocket.Upgrader
+	ChanMutex *sync.RWMutex
+	Channels  map[string]chan EvalRes
 }
 
 type SocketHandler struct{}
@@ -37,6 +38,29 @@ type SocketHandler struct{}
 type Packet struct {
 	Type int         `json:"type"`
 	Body interface{} `json:"body,omitempty"`
+}
+
+func (w *WSServer) PutEvalChan(id string) {
+	w.ChanMutex.Lock()
+	w.Channels[id] = make(chan EvalRes)
+	w.ChanMutex.Unlock()
+}
+
+func (w *WSServer) GetEvalChan(id string) chan EvalRes {
+	w.ChanMutex.RLock()
+	val, ok := w.Channels[id]
+	if ok {
+		w.ChanMutex.RUnlock()
+		return val
+	}
+	w.ChanMutex.RUnlock()
+	return nil
+}
+
+func (w *WSServer) DeleteEvalChan(id string) {
+	w.ChanMutex.Lock()
+	delete(w.Channels, id)
+	w.ChanMutex.Unlock()
 }
 
 func (*SocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +93,7 @@ func (*SocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-func (server *WSServer) Listen() {
+func (w *WSServer) Listen() {
 	http.Handle("/ws", &SocketHandler{})
 	http.Handle("/metrics", &MetricsHandler{})
 	logrus.Infof("Starting to listen on localhost:3010")
