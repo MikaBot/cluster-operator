@@ -68,6 +68,12 @@ type EvalRes struct {
 	Error string `json:"error,omitempty"`
 }
 
+type ApiResponse struct {
+	Error   bool        `json:"error,omitempty"`
+	Message string      `json:"message,omitempty"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
 func (c *Cluster) Terminate() {
 	c.TerminateWithReason(0, "", "disconnected")
 }

@@ -96,6 +96,7 @@ func (*SocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (w *WSServer) Listen() {
 	http.Handle("/ws", &SocketHandler{})
 	http.Handle("/metrics", &MetricsHandler{})
+	http.Handle("/eval", &EvalHandler{})
 	logrus.Infof("Starting to listen on localhost:3010")
 	if err := http.ListenAndServe("0.0.0.0:3010", nil); err != nil {
 		logrus.Fatalf("HTTP Listen error: %v", err)
