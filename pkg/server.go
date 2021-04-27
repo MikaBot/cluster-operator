@@ -22,15 +22,18 @@ const (
 	BroadcastEvalAck        // server -> client
 	Stats                   // server -> client
 	StatsAck                // client -> server
-	// Misc events
-	Ready // client -> server
+	Ready                   // client -> server
+	Entity
+	EntityAck
 )
 
 type WSServer struct {
-	Clients   []*Cluster
-	Upgrader  websocket.Upgrader
-	ChanMutex *sync.RWMutex
-	Channels  map[string]chan EvalRes
+	Clients        []*Cluster
+	Upgrader       websocket.Upgrader
+	ChanMutex      *sync.RWMutex
+	Channels       map[string]chan EvalRes
+	EntityMutex    *sync.RWMutex
+	EntityChannels map[string]chan EntityResponse
 }
 
 type SocketHandler struct{}
@@ -61,6 +64,29 @@ func (w *WSServer) DeleteEvalChan(id string) {
 	w.ChanMutex.Lock()
 	delete(w.Channels, id)
 	w.ChanMutex.Unlock()
+}
+
+func (w *WSServer) PutEntityChan(id string) {
+	w.EntityMutex.Lock()
+	w.EntityChannels[id] = make(chan EntityResponse)
+	w.EntityMutex.Unlock()
+}
+
+func (w *WSServer) GetEntityChan(id string) chan EntityResponse {
+	w.EntityMutex.RLock()
+	val, ok := w.EntityChannels[id]
+	if ok {
+		w.EntityMutex.RUnlock()
+		return val
+	}
+	w.EntityMutex.RUnlock()
+	return nil
+}
+
+func (w *WSServer) DeleteEntityChan(id string) {
+	w.EntityMutex.Lock()
+	delete(w.EntityChannels, id)
+	w.EntityMutex.Unlock()
 }
 
 func (*SocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +124,7 @@ func (w *WSServer) Listen() {
 	http.Handle("/metrics", &MetricsHandler{})
 	http.Handle("/eval", &EvalHandler{})
 	http.Handle("/shardCount", &ExpectedShardHandler{})
+	http.Handle("/entity", &EntityHandler{})
 	logrus.Infof("Starting to listen on localhost:3010")
 	if err := http.ListenAndServe("0.0.0.0:3010", nil); err != nil {
 		logrus.Fatalf("HTTP Listen error: %v", err)

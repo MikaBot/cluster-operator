@@ -51,6 +51,18 @@ type ClusterStats struct {
 	BotEvents     map[string]float64 `json:"botEvents"`
 }
 
+type EntityRequest struct {
+	ID   string                 `json:"id,omitempty"`
+	Type string                 `json:"type"`
+	Args map[string]interface{} `json:"args,omitempty"`
+}
+
+type EntityResponse struct {
+	ID    string      `json:"id,omitempty"`
+	Error string      `json:"error,omitempty"`
+	Data  interface{} `json:"data,omitempty"`
+}
+
 type BroadcastEvalRequest struct {
 	ID      string `json:"id"`
 	Code    string `json:"code"`
@@ -198,6 +210,19 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 			break
 		}
 		if c := Server.GetEvalChan(res.ID); c != nil {
+			c <- res
+		}
+	case EntityAck:
+		bytes, err := json.Marshal(msg.Body)
+		if err != nil {
+			break
+		}
+		res := EntityResponse{}
+		err = json.Unmarshal(bytes, &res)
+		if err != nil {
+			break
+		}
+		if c := Server.GetEntityChan(res.ID); c != nil {
 			c <- res
 		}
 	}

@@ -25,10 +25,12 @@ func main() {
 	pkg.RegisterMetrics()
 	pkg.NewLogger()
 	pkg.Server = &pkg.WSServer{
-		Clients:   []*pkg.Cluster{},
-		Upgrader:  websocket.Upgrader{},
-		ChanMutex: &sync.RWMutex{},
-		Channels:  make(map[string]chan pkg.EvalRes),
+		Clients:        []*pkg.Cluster{},
+		Upgrader:       websocket.Upgrader{},
+		ChanMutex:      &sync.RWMutex{},
+		Channels:       make(map[string]chan pkg.EvalRes),
+		EntityMutex:    &sync.RWMutex{},
+		EntityChannels: make(map[string]chan pkg.EntityResponse),
 	}
 	pkg.CreateClusters(pkg.GetShardCount(), pkg.GetClusterCount())
 	pkg.Log.PostOperatorLog(pkg.ColorReady, fmt.Sprintf(
