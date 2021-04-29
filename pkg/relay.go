@@ -49,7 +49,10 @@ func (rh *RelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// Type 1 is receive
 			if packet.Type == 0 {
 				rh.mutex.RLock()
-				for _, c := range rh.clients {
+				for i, c := range rh.clients {
+					if i == id {
+						continue
+					}
 					_ = c.WriteJSON(Packet{
 						Type: 1,
 						Body: packet.Body,
