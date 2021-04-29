@@ -125,6 +125,10 @@ func (w *WSServer) Listen() {
 	http.Handle("/eval", &EvalHandler{})
 	http.Handle("/shardCount", &ExpectedShardHandler{})
 	http.Handle("/entity", &EntityHandler{})
+	http.Handle("/relay", &RelayHandler{
+		mutex:   &sync.RWMutex{},
+		clients: make(map[string]*websocket.Conn),
+	})
 	logrus.Infof("Starting to listen on localhost:3010")
 	if err := http.ListenAndServe("0.0.0.0:3010", nil); err != nil {
 		logrus.Fatalf("HTTP Listen error: %v", err)

@@ -1,6 +1,8 @@
 package pkg
 
 import (
+	"crypto/rand"
+	"fmt"
 	"github.com/joho/godotenv"
 	"os"
 	"sync"
@@ -29,6 +31,15 @@ func CreateClusters(shards, clusters int) {
 			statsChan:  make(chan *ClusterStats),
 		})
 	}
+}
+
+func RandomID() string {
+	bytes := make([]byte, 4)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%x", bytes)
 }
 
 func NextClusterID() int {
