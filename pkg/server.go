@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 	"net/http"
@@ -94,7 +95,7 @@ func (*SocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	if r.Header.Get("authorization") == "" || r.Header.Get("authorization") != GetAuth() {
+	if r.Header.Get("authorization") == "" || r.Header.Get("authorization") != Config.Auth {
 		_ = client.Close()
 		return
 	}
@@ -120,8 +121,10 @@ func (*SocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (w *WSServer) Listen() {
+	h := &MetricsHandler{}
+	h.Setup()
 	http.Handle("/ws", &SocketHandler{})
-	http.Handle("/metrics", &MetricsHandler{})
+	http.Handle("/metrics", h)
 	http.Handle("/eval", &EvalHandler{})
 	http.Handle("/shardCount", &ExpectedShardHandler{})
 	http.Handle("/entity", &EntityHandler{})
@@ -129,8 +132,8 @@ func (w *WSServer) Listen() {
 		mutex:   &sync.RWMutex{},
 		clients: make(map[string]*websocket.Conn),
 	})
-	logrus.Infof("Starting to listen on localhost:3010")
-	if err := http.ListenAndServe("0.0.0.0:3010", nil); err != nil {
+	logrus.Infof("Starting to listen on %s:%d", Config.Ip, Config.Port)
+	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", Config.Ip, Config.Port), nil); err != nil {
 		logrus.Fatalf("HTTP Listen error: %v", err)
 	}
 }

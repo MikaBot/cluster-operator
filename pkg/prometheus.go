@@ -3,150 +3,197 @@ package pkg
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sirupsen/logrus"
 	"net/http"
+	"reflect"
 	"strconv"
 )
 
+type Collector struct {
+	metric   string
+	original prometheus.Collector
+}
+
+type MetricsHandler struct {
+	metrics      []Collector
+	clusterCount prometheus.Gauge
+	shardCount   prometheus.Gauge
+}
+
 var (
-	commandErrors = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: namedPrefix("command_errors"),
-		Help: "Unexpected command errors",
-	}, []string{"name"})
-	commandUsage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: namedPrefix("command_usage"),
-		Help: "Command usage",
-	}, []string{"name"})
-	servers = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: namedPrefix("servers"),
-		Help: "Server count",
-	})
-	users = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: namedPrefix("users"),
-		Help: "User count",
-	})
-	clusterCount = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: namedPrefix("cluster_count"),
-		Help: "Cluster count",
-	})
-	shardCount = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: namedPrefix("shard_count"),
-		Help: "Shard count",
-	})
-	messagesSeen = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: namedPrefix("messages"),
-		Help: "Messages seen",
-	})
-	memoryUsage = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: namedPrefix("memory_usage"),
-		Help: "Memory usage per cluster",
-	}, []string{"cluster"})
-	discordEvents = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Name: namedPrefix("discord_events"),
-		Help: "Discord events per cluster",
-	}, []string{"name"})
 	registry          = prometheus.NewRegistry()
 	prometheusHandler = promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 )
 
-func RegisterMetrics() {
-	registry.MustRegister(
-		commandErrors,
-		commandUsage,
-		servers,
-		users,
-		clusterCount,
-		shardCount,
-		messagesSeen,
-		memoryUsage,
-		discordEvents,
-	)
-}
-
-func mergeClusterMetrics(clusterMetrics []*ClusterStats) *ClusterStats {
-	mergedMetrics := &ClusterStats{
-		CommandErrors: make(map[string]float64),
-		CommandUsage:  make(map[string]float64),
-		BotEvents:     make(map[string]float64),
-	}
-	for _, metrics := range clusterMetrics {
-		mergedMetrics.Uptime += metrics.Uptime
-		mergedMetrics.Servers += metrics.Servers
-		mergedMetrics.Users += metrics.Users
-		mergedMetrics.Shards += metrics.Shards
-		mergedMetrics.ReadyShards += metrics.ReadyShards
-		mergedMetrics.MessagesSeen += metrics.MessagesSeen
-		for v, count := range metrics.CommandErrors {
-			entry, ok := metrics.CommandErrors[v]
-			if ok {
-				entry += count
-			} else {
-				entry = count
-			}
-			mergedMetrics.CommandErrors[v] = count
-		}
-		for v, count := range metrics.CommandUsage {
-			entry, ok := metrics.CommandUsage[v]
-			if ok {
-				entry += count
-			} else {
-				entry = count
-			}
-			mergedMetrics.CommandUsage[v] = count
-		}
-		for v, count := range metrics.BotEvents {
-			entry, ok := metrics.BotEvents[v]
-			if ok {
-				entry += count
-			} else {
-				entry = count
-			}
-			mergedMetrics.BotEvents[v] = count
+func findMetricByName(name string) *Metric {
+	for _, metric := range Config.Metrics {
+		if metric.Name == name {
+			return &metric
 		}
 	}
-	return mergedMetrics
+	return nil
 }
 
-type MetricsHandler struct{}
+// Setup registers all metrics that the user has defined in their config.json
+// This also exposes 2 default metrics, cluster_count and shard_count
+func (h *MetricsHandler) Setup() {
+	h.clusterCount = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: MetricPrefix("cluster_count"),
+		Help: "Total clusters!",
+	})
+	h.shardCount = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: MetricPrefix("shard_count"),
+		Help: "Total shards!",
+	})
+	registry.MustRegister(h.clusterCount, h.shardCount)
+	for _, metric := range Config.Metrics {
+		var collector prometheus.Collector
+		if metric.Type == "gauge" && len(metric.Labels) > 0 {
+			collector = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Name: MetricPrefix(metric.Name),
+				Help: metric.Description,
+			}, metric.Labels)
+		} else if metric.Type == "gauge" && len(metric.Labels) < 1 {
+			collector = prometheus.NewGauge(prometheus.GaugeOpts{
+				Name: MetricPrefix(metric.Name),
+				Help: metric.Description,
+			})
+		} else if metric.Type == "counter" && len(metric.Labels) > 0 {
+			collector = prometheus.NewCounterVec(prometheus.CounterOpts{
+				Name: MetricPrefix(metric.Name),
+				Help: metric.Description,
+			}, metric.Labels)
+		} else if metric.Type == "counter" && len(metric.Labels) < 1 {
+			collector = prometheus.NewCounter(prometheus.CounterOpts{
+				Name: MetricPrefix(metric.Name),
+				Help: metric.Description,
+			})
+		}
+		h.metrics = append(h.metrics, Collector{
+			metric:   metric.Name,
+			original: collector,
+		})
+		if err := registry.Register(collector); err == nil {
+			logrus.Infof("Picked up and registered metric %s as type %s", metric.Name, metric.Type)
+		} else {
+			logrus.Errorf("Failed to register metric %s: %s", metric.Name, err.Error())
+		}
+	}
+}
+
+// This function will merge all cluster metrics into a single map of objects.
+// Just a reminder that, anything as a nested object will be treated as a LABELED metric, and expects it's children stats to also be maps with a number as it's value.
+func (h *MetricsHandler) mergeMetrics(metrics []map[string]interface{}) map[string]interface{} {
+	merged := make(map[string]interface{})
+	for i, metric := range metrics {
+		for key, child := range metric {
+			m := findMetricByName(key)
+			if m == nil {
+				logrus.Warnf("Cluster %d has an unknown metric field %s!", i, key)
+				continue
+			}
+			if f, ok := child.(float64); ok {
+				if len(m.Labels) > 0 && m.Labels[0] == "cluster" {
+					if _, ok := merged[key]; ok {
+						merged[key].(map[string]interface{})[strconv.Itoa(i)] = f
+					} else {
+						merged[key] = map[string]interface{}{strconv.Itoa(i): f}
+					}
+				} else {
+					if v, ok := merged[key]; ok {
+						merged[key] = v.(float64) + f
+					} else {
+						merged[key] = f
+					}
+				}
+			}
+			if m, ok := child.(map[string]interface{}); ok {
+				for k, v := range m {
+					if f, ok := v.(float64); ok {
+						if mergedMap, ok := merged[key].(map[string]interface{}); ok {
+							if v1, ok := mergedMap[k]; ok {
+								mergedMap[k] = v1.(float64) + f
+							} else {
+								mergedMap[k] = f
+							}
+							merged[key] = mergedMap
+						} else {
+							merged[key] = map[string]interface{}{
+								k: f,
+							}
+						}
+					} else {
+						logrus.Errorf("Expected key %s to be an integer, got %s instead!", k, reflect.TypeOf(v).Name())
+					}
+				}
+			}
+		}
+	}
+	return merged
+}
+
+func (h *MetricsHandler) findCollector(name string) *Collector {
+	for _, c := range h.metrics {
+		if c.metric == name {
+			return &c
+		}
+	}
+	return nil
+}
+
+func (h *MetricsHandler) setCollector(labels prometheus.Labels, val float64, c *Collector) {
+	if v, ok := c.original.(prometheus.Gauge); ok {
+		v.Set(val)
+	} else if v, ok := c.original.(*prometheus.GaugeVec); ok {
+		v.With(labels).Set(val)
+	} else if v, ok := c.original.(prometheus.Counter); ok {
+		v.Add(val)
+	} else if v, ok := c.original.(*prometheus.CounterVec); ok {
+		v.With(labels).Add(val)
+	}
+}
 
 func (h *MetricsHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if GetHealthyClusters() < 1 {
-		// Reset metrics if no clusters are healthy rather than returning no data
-		memoryUsage.Reset()
-		commandErrors.Reset()
-		commandUsage.Reset()
-		servers.Set(0)
-		users.Set(0)
-		clusterCount.Set(0)
-		shardCount.Set(0)
-		messagesSeen.Set(0)
-		memoryUsage.Reset()
-		discordEvents.Reset()
-		prometheusHandler.ServeHTTP(w, req)
+		w.WriteHeader(500)
 		return
 	}
-	clusterMetrics := make([]*ClusterStats, 0, len(Server.Clients))
+	clusterMetrics := make([]map[string]interface{}, 0, len(Server.Clients))
 	for _, cluster := range Server.Clients {
 		stats := cluster.RequestStats()
 		if stats == nil {
 			continue
 		}
 		clusterMetrics = append(clusterMetrics, stats)
-		memoryUsage.With(prometheus.Labels{"cluster": strconv.Itoa(cluster.ID)}).Set(stats.MemoryUsage)
 	}
-	metrics := mergeClusterMetrics(clusterMetrics)
-	for name, count := range metrics.CommandErrors {
-		commandErrors.With(prometheus.Labels{"name": name}).Set(count)
+	metrics := make(map[string]interface{})
+	if !Config.MergeMetrics {
+		metrics = clusterMetrics[0]
+	} else {
+		metrics = h.mergeMetrics(clusterMetrics)
 	}
-	for name, count := range metrics.CommandUsage {
-		commandUsage.With(prometheus.Labels{"name": name}).Set(count)
+	for key, child := range metrics {
+		c := h.findCollector(key)
+		if c == nil {
+			continue
+		}
+		m := findMetricByName(c.metric)
+		if m == nil {
+			continue
+		}
+		if f, ok := child.(float64); ok {
+			h.setCollector(nil, f, c)
+		}
+		if data, ok := child.(map[string]interface{}); ok {
+			for key, v := range data {
+				f := v.(float64)
+				labels := prometheus.Labels{}
+				for _, label := range m.Labels {
+					labels[label] = key
+				}
+				h.setCollector(labels, f, c)
+			}
+		}
 	}
-	for name, count := range metrics.BotEvents {
-		discordEvents.With(prometheus.Labels{"name": name}).Set(count)
-	}
-	servers.Set(metrics.Servers)
-	users.Set(metrics.Users)
-	clusterCount.Set(float64(GetClusterCount()))
-	shardCount.Set(metrics.ReadyShards)
-	messagesSeen.Set(metrics.MessagesSeen)
 	prometheusHandler.ServeHTTP(w, req)
 }

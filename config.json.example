@@ -1,0 +1,18 @@
+{
+  "env": "Prod", // env name to use for logs (required)
+  "clusters": 1, // cluster count
+  "shards": 1, // shard count
+  "auth": "", // WS/HTTP authentication
+  "webhook": "", // Where to log cluster related events
+  "metricsPrefix": "mika_alpha_",
+  "metrics": [ // this array is optional
+    {
+       "key": "servers", // required
+       "type": "counter", // required
+       "description": "Server counter!" // required by prometheus
+    }
+    ...
+  ],
+  "mergeMetrics": true, // if this is false, metrics will be from the FIRST cluster only
+  "logEvents": false // if events should be logged
+}

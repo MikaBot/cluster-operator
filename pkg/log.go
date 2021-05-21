@@ -6,15 +6,12 @@ import (
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"net/http"
-	"os"
-	"strings"
 	"time"
 )
 
 const (
 	ColorConnecting    = 0x0E6CF7
 	ColorReady         = 0x00DB62
-	ColorWarning       = 0xFFFF66
 	ColorDisconnecting = 0xFF4444
 )
 
@@ -41,7 +38,7 @@ func NewLogger() {
 		panic("Tried to initialise another logger instance.")
 	}
 	Log = &Logger{
-		webhookUrl: os.Getenv("WEBHOOK"),
+		webhookUrl: Config.Webhook,
 		client: &http.Client{
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return nil
@@ -80,11 +77,6 @@ func (log *Logger) currentDate() string {
 	)
 }
 
-func (log *Logger) prettyEnvName() string {
-	name := os.Getenv("ENV")
-	return strings.ToUpper(name[0:1]) + name[1:]
-}
-
 func (log *Logger) description(c *Cluster, event string) string {
 	return fmt.Sprintf(
 		"`[%s]` | Cluster `%d` %s | Shards `%d` - `%d` | %s",
@@ -93,7 +85,7 @@ func (log *Logger) description(c *Cluster, event string) string {
 		event,
 		c.FirstShardID(),
 		c.LastShardID(),
-		log.prettyEnvName(),
+		Config.Env,
 	)
 }
 
@@ -102,12 +94,12 @@ func (log *Logger) operator(event string) string {
 		"`[%s]` | %s | %s",
 		log.currentDate(),
 		event,
-		log.prettyEnvName(),
+		Config.Env,
 	)
 }
 
 func (log *Logger) PostLog(c *Cluster, color int, event string) {
-	if !LogsEnabled() {
+	if !Config.LogEvents {
 		return
 	}
 	s := time.Now()
@@ -124,11 +116,11 @@ func (log *Logger) PostLog(c *Cluster, color int, event string) {
 		logrus.Errorf("PostLog failed to get a response: %s", err.Error())
 		return
 	}
-	logrus.Debugf("Got status %s from Discord in %s, when telling logs that we're firing event %s!", res.Status, time.Now().Sub(s).String(), event)
+	logrus.Debugf("Got status %s from Discord in %s, when firing event %s!", res.Status, time.Now().Sub(s).String(), event)
 }
 
 func (log *Logger) PostOperatorLog(color int, event string) {
-	if !LogsEnabled() {
+	if !Config.LogEvents {
 		return
 	}
 	s := time.Now()

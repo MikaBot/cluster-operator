@@ -4,7 +4,6 @@ import (
 	"cluster-operator/pkg"
 	"fmt"
 	"github.com/gorilla/websocket"
-	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
@@ -13,16 +12,10 @@ import (
 )
 
 func init() {
-	_ = godotenv.Load()
 	logrus.SetLevel(logrus.DebugLevel)
-	logrus.SetFormatter(&logrus.TextFormatter{
-		ForceColors:   true,
-		FullTimestamp: true,
-	})
 }
 
 func main() {
-	pkg.RegisterMetrics()
 	pkg.NewLogger()
 	pkg.Server = &pkg.WSServer{
 		Clients:        []*pkg.Cluster{},
@@ -32,12 +25,12 @@ func main() {
 		EntityMutex:    &sync.RWMutex{},
 		EntityChannels: make(map[string]chan pkg.EntityResponse),
 	}
-	pkg.CreateClusters(pkg.GetShardCount(), pkg.GetClusterCount())
+	pkg.CreateClusters(pkg.Config.Shards, pkg.Config.Clusters)
 	pkg.Log.PostOperatorLog(pkg.ColorReady, fmt.Sprintf(
 		"Operator is online and will be handling %d shards with %d clusters, that's about %d shard(s) per cluster!",
-		pkg.GetShardCount(),
-		pkg.GetClusterCount(),
-		pkg.GetShardCount()/pkg.GetClusterCount(),
+		pkg.Config.Shards,
+		pkg.Config.Clusters,
+		pkg.Config.Shards/pkg.Config.Clusters,
 	))
 	go pkg.Server.Listen()
 	c := make(chan os.Signal, 1)

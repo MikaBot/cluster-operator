@@ -3,15 +3,8 @@ package pkg
 import (
 	"crypto/rand"
 	"fmt"
-	"github.com/joho/godotenv"
-	"os"
 	"sync"
 )
-
-func namedPrefix(key string) string {
-	_ = godotenv.Load()
-	return "mika_" + os.Getenv("ENV") + "_" + key
-}
 
 func CreateClusters(shards, clusters int) {
 	shardIds := make([]int, 0, shards)
@@ -24,11 +17,11 @@ func CreateClusters(shards, clusters int) {
 			ID:         len(Server.Clients),
 			Client:     nil,
 			PingRecv:   false,
-			Block:      ClusterBlock{Shards: shardIds[i : i+avgShardsPerCluster], Total: GetShardCount()},
+			Block:      ClusterBlock{Shards: shardIds[i : i+avgShardsPerCluster], Total: Config.Shards},
 			State:      ClusterWaiting,
 			pingTicker: nil,
 			mutex:      &sync.Mutex{},
-			statsChan:  make(chan *ClusterStats),
+			statsChan:  make(chan map[string]interface{}),
 		})
 	}
 }

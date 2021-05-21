@@ -28,7 +28,7 @@ func (rh *RelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	if r.Header.Get("authorization") == "" || r.Header.Get("authorization") != GetAuth() {
+	if r.Header.Get("authorization") == "" || r.Header.Get("authorization") != Config.Auth {
 		_ = client.Close()
 		return
 	}

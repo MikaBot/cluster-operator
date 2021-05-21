@@ -15,9 +15,9 @@ func (_ *ExpectedShardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		writeJson(w, 403, ApiResponse{Error: true, Message: "Unauthorized"})
 		return
 	}
-	if r.Header.Get("Authorization") != GetAuth() {
+	if r.Header.Get("Authorization") != Config.Auth {
 		writeJson(w, 403, ApiResponse{Error: true, Message: "Forbidden"})
 		return
 	}
-	writeJson(w, 200, ApiResponse{Data: GetShardCount()})
+	writeJson(w, 200, ApiResponse{Data: Config.Shards})
 }

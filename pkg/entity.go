@@ -19,7 +19,7 @@ func (_ *EntityHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJson(w, 403, ApiResponse{Error: true, Message: "Unauthorized"})
 		return
 	}
-	if r.Header.Get("Authorization") != GetAuth() {
+	if r.Header.Get("Authorization") != Config.Auth {
 		writeJson(w, 403, ApiResponse{Error: true, Message: "Forbidden"})
 		return
 	}

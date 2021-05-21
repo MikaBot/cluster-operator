@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 	"sync"
@@ -35,7 +34,7 @@ type Cluster struct {
 	State      ClusterState    `json:"state"`
 	pingTicker *time.Ticker
 	mutex      *sync.Mutex
-	statsChan  chan *ClusterStats
+	statsChan  chan map[string]interface{}
 }
 
 type ClusterStats struct {
@@ -91,7 +90,7 @@ func (c *Cluster) Terminate() {
 }
 
 func (c *Cluster) TerminateWithReason(code int, reason, logReason string) {
-	logrus.Infof("Terminating cluster %d ", c.ID)
+	logrus.Infof("Terminating cluster %d", c.ID)
 	if c.pingTicker != nil {
 		c.pingTicker.Stop()
 	}
@@ -118,12 +117,6 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 	switch msg.Type {
 	case Handshaking:
 		lock.Lock()
-		if len(c.Block.Shards) > ShardThresh {
-			Log.PostOperatorLog(
-				ColorWarning,
-				fmt.Sprintf("Cluster `%d` will be handling more than `%d` shards, consider increasing cluster count!", c.ID, ShardThresh),
-			)
-		}
 		c.StartHealthCheck()
 		logrus.Infof("Giving cluster %d shards %d to %d", c.ID, c.FirstShardID(), c.LastShardID())
 		Log.PostLog(c, ColorConnecting, "connecting")
@@ -135,7 +128,7 @@ func (c *Cluster) HandleMessage(msg *Packet) {
 		if err != nil {
 			break
 		}
-		stats := &ClusterStats{}
+		stats := make(map[string]interface{})
 		err = json.Unmarshal(bytes, &stats)
 		if err != nil {
 			break
@@ -238,7 +231,7 @@ func (c *Cluster) Write(t int, data interface{}) {
 	c.mutex.Unlock()
 }
 
-func (c *Cluster) RequestStats() *ClusterStats {
+func (c *Cluster) RequestStats() map[string]interface{} {
 	if c.Client != nil {
 		c.Write(Stats, nil)
 		select {
