@@ -5,7 +5,7 @@ COPY . .
 RUN go get
 RUN go build
 
-FROM alpine:3.13
+FROM alpine:3.14
 WORKDIR /app
 COPY --from=builder /app/cluster-operator /app/
 CMD ["./cluster-operator"]
