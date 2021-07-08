@@ -54,7 +54,11 @@ func (_ *EvalHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	Server.PutEvalChan(body.ID)
 	results := make([]EvalRes, 0, len(Server.Clients))
 	for _, cluster := range Server.Clients {
-		if cluster.State == ClusterWaiting || cluster.State == ClusterConnecting {
+		if cluster.State == ClusterConnecting {
+			results = append(results, EvalRes{Error: "Cluster is connecting!"})
+			continue
+		}
+		if cluster.State == ClusterWaiting {
 			results = append(results, EvalRes{Error: "Cluster is not ready!"})
 			continue
 		}

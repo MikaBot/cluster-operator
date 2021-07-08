@@ -11,6 +11,9 @@ import (
 )
 
 func init() {
+	logrus.SetFormatter(&logrus.TextFormatter{
+		DisableColors: true,
+	})
 	logrus.SetLevel(logrus.DebugLevel)
 }
 

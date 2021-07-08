@@ -37,19 +37,6 @@ type Cluster struct {
 	statsChan  chan map[string]interface{}
 }
 
-type ClusterStats struct {
-	Uptime        float64            `json:"uptime"`
-	Servers       float64            `json:"servers"`
-	Users         float64            `json:"users"`
-	Shards        float64            `json:"shards"`
-	ReadyShards   float64            `json:"readyShards"`
-	MemoryUsage   float64            `json:"memoryUsage"`
-	MessagesSeen  float64            `json:"messagesSeen"`
-	CommandErrors map[string]float64 `json:"commandErrors"`
-	CommandUsage  map[string]float64 `json:"commandUsage"`
-	BotEvents     map[string]float64 `json:"botEvents"`
-}
-
 type EntityRequest struct {
 	ID   string                 `json:"id,omitempty"`
 	Type string                 `json:"type"`
@@ -116,6 +103,7 @@ func (c *Cluster) LastShardID() int {
 func (c *Cluster) HandleMessage(msg *Packet) {
 	switch msg.Type {
 	case Handshaking:
+		c.State = ClusterConnecting
 		lock.Lock()
 		c.StartHealthCheck()
 		logrus.Infof("Giving cluster %d shards %d to %d", c.ID, c.FirstShardID(), c.LastShardID())
