@@ -35,7 +35,7 @@ func findMetricByName(name string) *Metric {
 }
 
 // Setup registers all metrics that the user has defined in their config.json
-// This also exposes 2 default metrics, cluster_count and shard_count
+// This also exposes 2 default metrics (unless disabled), cluster_count and shard_count
 func (h *MetricsHandler) Setup() {
 	h.clusterCount = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: MetricPrefix("cluster_count"),
@@ -83,6 +83,7 @@ func (h *MetricsHandler) Setup() {
 
 // This function will merge all cluster metrics into a single map of objects.
 // Just a reminder that, anything as a nested object will be treated as a LABELED metric, and expects it's children stats to also be maps with a number as it's value.
+// Cluster is a special label, representing the current cluster.
 func (h *MetricsHandler) mergeMetrics(metrics []map[string]interface{}) map[string]interface{} {
 	merged := make(map[string]interface{})
 	for i, metric := range metrics {
@@ -165,6 +166,10 @@ func (h *MetricsHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			continue
 		}
 		clusterMetrics = append(clusterMetrics, stats)
+	}
+	if Config.ExportDefaultMetrics {
+		h.clusterCount.Set(float64(Config.Clusters))
+		h.shardCount.Set(float64(Config.Shards))
 	}
 	metrics := make(map[string]interface{})
 	if !Config.MergeMetrics {

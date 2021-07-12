@@ -14,5 +14,6 @@
     ...
   ],
   "mergeMetrics": true, // if this is false, metrics will be from the FIRST cluster only
-  "logEvents": false // if events should be logged
+  "logEvents": false, // if events should be logged
+  "exportDefaultMetrics": false // if default metrics should be exported
 }

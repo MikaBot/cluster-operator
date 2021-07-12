@@ -42,6 +42,8 @@ type OperatorConfig struct {
 	MergeMetrics bool `json:"mergeMetrics"`
 	// If the cluster operator should log cluster events to the webhook (as defined above)
 	LogEvents bool `json:"logEvents"`
+	// If prometheus will export default metrics (false by default).
+	ExportDefaultMetrics bool `json:"exportDefaultMetrics"`
 }
 
 func init() {
@@ -72,7 +74,7 @@ func init() {
 		logrus.Fatal("Shard count should be greater than 0!")
 	}
 	if len(Config.Metrics) > 0 && Config.MetricsPrefix == "" {
-		logrus.Warn("You have set multiple metrics, but no metrics prefix; ignore this warning if you know what you're doing! However, a metric with the name 'ping' can be overwritten by any other cluster operators that run on your server!")
+		logrus.Warn("You have set multiple metrics, but no metrics prefix; ignore this warning if you know what you're doing! However, a metric with the name 'ping' can be overwritten by any other cluster operators that run on your server, that prometheus scrapes data from!")
 	}
 	if len(Config.Metrics) > 0 {
 		for i, metric := range Config.Metrics {
