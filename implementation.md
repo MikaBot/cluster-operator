@@ -32,7 +32,7 @@ Handshaking is a broad term here, because for one it's used to define the connec
 You should send a handshaking packet as soon as the WebSocket opens:
 ```json
 {
-  "type": 1
+  "type": 0
 }
 ```
 
